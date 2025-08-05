@@ -11,26 +11,33 @@ const categorySchema = z.object({
   name: z.string().min(1, { message: 'Nama kategori wajib diisi.' }),
 });
 
-// Ganti tipe parameter kedua menjadi 'context'
-export async function GET(req: Request, context: { params: { id: string } }) {
+// Tipe yang lebih eksplisit untuk parameter kedua
+interface RouteContext {
+  params: {
+    id: string;
+  };
+}
+
+// Handler GET
+export async function GET(req: Request, context: RouteContext) {
   const { id } = context.params;
   try {
     const category = await prisma.category.findUnique({
       where: { id },
     });
-    
+
     if (!category) {
       return NextResponse.json({ message: 'Kategori tidak ditemukan.' }, { status: 404 });
     }
-    
+
     return NextResponse.json(category);
   } catch (error) {
     return NextResponse.json({ message: 'Gagal mengambil data kategori.' }, { status: 500 });
   }
 }
 
-// Ganti tipe parameter kedua menjadi 'context'
-export async function PUT(req: Request, context: { params: { id: string } }) {
+// Handler PUT
+export async function PUT(req: Request, context: RouteContext) {
   const { id } = context.params;
   try {
     const body = await req.json();
@@ -59,8 +66,8 @@ export async function PUT(req: Request, context: { params: { id: string } }) {
   }
 }
 
-// Ganti tipe parameter kedua menjadi 'context'
-export async function DELETE(req: Request, context: { params: { id: string } }) {
+// Handler DELETE
+export async function DELETE(req: Request, context: RouteContext) {
   const { id } = context.params;
   try {
     await prisma.category.delete({
