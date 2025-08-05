@@ -1,13 +1,9 @@
-// app/api/auth/[...nextauth]/route.ts
-
-import NextAuth from 'next-auth';
+import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import { PrismaClient } from '@prisma/client';
-import { compare } from 'bcrypt';
+import { compare } from 'bcryptjs';
+import { prisma } from '@/lib/prisma';
 
-const prisma = new PrismaClient();
-
-export const authOptions = {
+export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -16,42 +12,64 @@ export const authOptions = {
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials) return null;
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Email dan password wajib diisi');
+        }
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
         });
 
-        if (user && (await compare(credentials.password, user.password))) {
-          // Mengembalikan objek User dengan properti role
-          return {
-            id: user.id,
-            email: user.email,
-            role: user.role,
-          };
+        if (!user) {
+          throw new Error('Email tidak ditemukan');
         }
-        return null;
+
+        const isPasswordValid = await compare(credentials.password, user.password);
+
+        if (!isPasswordValid) {
+          throw new Error('Password salah');
+        }
+
+        // ✅ Data yang dibutuhkan oleh JWT & session
+        return {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+        };
       },
     }),
   ],
+  session: {
+    strategy: 'jwt',
+  },
   callbacks: {
     async jwt({ token, user }) {
+      // Saat pertama kali login
       if (user) {
-        // TypeScript sekarang tahu bahwa `user` memiliki `role`
+        token.id = user.id;
         token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token) {
-        // TypeScript sekarang tahu bahwa `session.user` dan `token` memiliki `role`
-        session.user.role = token.role;
+      // Inject ID dan role ke session.user
+      if (token && session.user) {
+        session.user.id = token.id as string;
+        session.user.role = token.role as string;
       }
       return session;
     },
+    async redirect({ baseUrl, url, token }) {
+      // 🔁 Redirect otomatis setelah login berdasarkan role
+      if (token?.role === 'ADMIN') {
+        return `${baseUrl}/dashboard`;
+      } else {
+        return 'http://192.168.100.58:3000/';
+      }
+    },
   },
-  session: {
-    strategy: 'jwt',
+  pages: {
+    signIn: '/login',
   },
 };
 
